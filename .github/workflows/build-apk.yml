@@ -1,0 +1,62 @@
+name: Gerar APK WebView
+
+"on":
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar SDK Android
+        run: |
+          yes | sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: Descompactar projeto
+        run: |
+          rm -rf projeto
+          unzip -o ferramentas-combate-webview-apk.zip -d projeto
+          find projeto -maxdepth 4 -type f
+
+      - name: Encontrar projeto Android
+        run: |
+          PROJECT_DIR=$(find projeto -type f -name settings.gradle -exec dirname {} \; | head -n 1)
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+          echo "Projeto Android encontrado em: $PROJECT_DIR"
+
+      - name: Gerar APK Debug
+        run: |
+          cd "$PROJECT_DIR"
+          gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Separar APK
+        run: |
+          APK_PATH=$(find "$PROJECT_DIR/app/build/outputs/apk/debug" -name "*.apk" | head -n 1)
+          echo "APK encontrado em: $APK_PATH"
+          cp "$APK_PATH" ferramentas-combate-webview-debug.apk
+
+      - name: Enviar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ferramentas-combate-webview-apk
+          path: ferramentas-combate-webview-debug.apk
