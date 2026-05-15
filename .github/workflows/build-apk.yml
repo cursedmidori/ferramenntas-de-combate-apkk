@@ -6,6 +6,9 @@ name: Gerar APK WebView
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -25,32 +28,90 @@ jobs:
 
       - name: Instalar SDK Android
         run: |
-          yes | sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
 
-      -- name: Descompactar projeto
-  run: |
-    rm -rf projeto
-    unzip -o ferramentas-combate-webview-apk-interface-corrigida.zip -d projeto
-    find projeto -maxdepth 4 -type f
+      - name: Encontrar arquivo ZIP
+        run: |
+          echo "Arquivos na raiz do repositório:"
+          ls -la
+
+          ZIP_FILE=""
+
+          for candidate in \
+            "ferramentas-combate-webview-apk-interface-corrigida.zip" \
+            "ferramentas-combate-webview-apk-rituais-importados.zip" \
+            "ferramentas-combate-webview-apk-regras-opcionais.zip" \
+            "ferramentas-combate-webview-apk-importador-fichas.zip" \
+            "ferramentas-combate-webview-apk.zip"
+          do
+            if [ -f "$candidate" ]; then
+              ZIP_FILE="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$ZIP_FILE" ]; then
+            ZIP_FILE=$(find . -maxdepth 1 -type f -name "*.zip" | sort | head -n 1)
+          fi
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERRO: Nenhum arquivo .zip encontrado na raiz do repositório."
+            exit 1
+          fi
+
+          echo "ZIP_FILE=$ZIP_FILE" >> $GITHUB_ENV
+          echo "Arquivo ZIP escolhido: $ZIP_FILE"
+
+      - name: Descompactar projeto
+        run: |
+          rm -rf projeto
+          unzip -o "$ZIP_FILE" -d projeto
+
+          echo "Arquivos descompactados:"
+          find projeto -maxdepth 5 -type f | sort
+
       - name: Encontrar projeto Android
         run: |
-          PROJECT_DIR=$(find projeto -type f -name settings.gradle -exec dirname {} \; | head -n 1)
+          PROJECT_DIR=$(find projeto -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) -exec dirname {} \; | head -n 1)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERRO: Não encontrei settings.gradle ou settings.gradle.kts dentro do ZIP."
+            echo "Estrutura encontrada:"
+            find projeto -maxdepth 6 -type f | sort
+            exit 1
+          fi
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
           echo "Projeto Android encontrado em: $PROJECT_DIR"
 
       - name: Gerar APK Debug
         run: |
           cd "$PROJECT_DIR"
-          gradle :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Separar APK
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew :app:assembleDebug --no-daemon --stacktrace
+          else
+            gradle :app:assembleDebug --no-daemon --stacktrace
+          fi
+
+      - name: Encontrar APK gerado
         run: |
-          APK_PATH=$(find "$PROJECT_DIR/app/build/outputs/apk/debug" -name "*.apk" | head -n 1)
+          APK_PATH=$(find "$PROJECT_DIR" -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
+
+          if [ -z "$APK_PATH" ]; then
+            echo "ERRO: APK não encontrado."
+            echo "Arquivos em build/outputs:"
+            find "$PROJECT_DIR" -path "*/build/outputs/*" -type f | sort || true
+            exit 1
+          fi
+
           echo "APK encontrado em: $APK_PATH"
           cp "$APK_PATH" ferramentas-combate-webview-debug.apk
 
