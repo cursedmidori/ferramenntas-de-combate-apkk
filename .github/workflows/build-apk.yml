@@ -32,12 +32,11 @@ jobs:
         with:
           gradle-version: 8.7
 
-      - name: Descompactar projeto
-        run: |
-          rm -rf projeto
-          unzip -o ferramentas-combate-webview-apk.zip -d projeto
-          find projeto -maxdepth 4 -type f
-
+      -- name: Descompactar projeto
+  run: |
+    rm -rf projeto
+    unzip -o ferramentas-combate-webview-apk-interface-corrigida.zip -d projeto
+    find projeto -maxdepth 4 -type f
       - name: Encontrar projeto Android
         run: |
           PROJECT_DIR=$(find projeto -type f -name settings.gradle -exec dirname {} \; | head -n 1)
